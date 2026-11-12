@@ -13,7 +13,6 @@ import time
 from collections import OrderedDict, deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from pathlib import Path
 
 import cv2
 import httpx
@@ -26,6 +25,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from PIL import Image, ImageOps
 
 from .artifacts import FileStore, ResultStore
+from .config import repository_root, resolve_path
 from .da3_engine import Engine, calibrate
 from .protocol import APIError, parse_request
 from .streaming import JobManager, StreamingRunner
@@ -957,11 +957,8 @@ def make_app(args):
 
 
 def arguments(argv=None):
-    root = Path(__file__).resolve().parents[2]
-    if not (root / "da3_streaming/configs/base_config.yaml").is_file():
-        root = Path.cwd()
-    root = Path(os.getenv("FASTDA3_ROOT", str(root)))
-    data = Path(os.getenv("DA3_DATA_DIR", str(root / "runtime")))
+    root = repository_root()
+    data = resolve_path(os.getenv("DA3_DATA_DIR", "runtime"), root)
     parser = argparse.ArgumentParser(
         description="FastDA3 OpenAI-style depth, pose and streaming service"
     )
@@ -1040,11 +1037,27 @@ def arguments(argv=None):
         b < 1 or b > args.max_batch_size for b in args.graph_batches
     ):
         parser.error("graph-batches must contain batch sizes from 1 to max-batch-size")
+    for name in (
+        "model_dir",
+        "output_dir",
+        "jobs_dir",
+        "files_dir",
+        "streaming_repo",
+        "salad_checkpoint",
+        "dinov2_repo",
+    ):
+        setattr(args, name, str(resolve_path(getattr(args, name), root)))
     return args
 
 
 def main():
+    from .preflight import validate
+
     args = arguments()
+    try:
+        log.info("Preflight: %s", validate(args))
+    except Exception as exc:
+        raise SystemExit(f"FastDA3 preflight failed: {exc}") from exc
     uvicorn.run(
         make_app(args),
         host=args.host,

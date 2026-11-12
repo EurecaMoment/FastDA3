@@ -8,7 +8,9 @@ import tempfile
 import urllib.request
 import zipfile
 
-ROOT = Path(__file__).resolve().parents[1]
+from fastda3.config import repository_root, resolve_path
+
+ROOT = repository_root()
 MODEL = "depth-anything/DA3NESTED-GIANT-LARGE-1.1"
 SALAD_URL = "https://github.com/serizba/salad/releases/download/v1.0.0/dino_salad.ckpt"
 SALAD_SHA256 = "6b3f1720954293e83da6966c5cfcfc6713200d7fefadcca76fc51aeb80b3cada"
@@ -44,16 +46,35 @@ def download(url, destination, checksum=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--model-dir", type=Path, default=ROOT / "weights/DA3NESTED-GIANT-LARGE-1.1"
+        "--model-dir",
+        type=Path,
+        default=os.getenv(
+            "DA3_MODEL_DIR", str(ROOT / "weights/DA3NESTED-GIANT-LARGE-1.1")
+        ),
     )
     parser.add_argument(
-        "--salad-checkpoint", type=Path, default=ROOT / "weights/dino_salad.ckpt"
+        "--salad-checkpoint",
+        type=Path,
+        default=os.getenv(
+            "DA3_SALAD_CHECKPOINT", str(ROOT / "weights/dino_salad.ckpt")
+        ),
     )
-    parser.add_argument("--dinov2-repo", type=Path, default=ROOT / "vendor/dinov2")
+    parser.add_argument(
+        "--dinov2-repo",
+        type=Path,
+        default=os.getenv("DA3_DINOV2_REPO", str(ROOT / "vendor/dinov2")),
+    )
+    parser.add_argument(
+        "--streaming-repo",
+        type=Path,
+        default=os.getenv("DA3_STREAMING_REPO", str(ROOT / "da3_streaming")),
+    )
     parser.add_argument("--model-revision", default="main")
     parser.add_argument("--check-only", action="store_true")
     args = parser.parse_args()
-    salad_source = ROOT / "da3_streaming/loop_utils/salad/models/helper.py"
+    for name in ("model_dir", "salad_checkpoint", "dinov2_repo", "streaming_repo"):
+        setattr(args, name, resolve_path(getattr(args, name), ROOT))
+    salad_source = args.streaming_repo / "loop_utils/salad/models/helper.py"
     if not salad_source.is_file():
         parser.error(
             "SALAD submodule is missing; run git submodule update --init --recursive"

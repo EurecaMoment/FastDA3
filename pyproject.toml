@@ -20,7 +20,7 @@ dependencies = [
     "huggingface_hub",
     "imageio",
     "numpy<2",
-    "opencv-python",
+    "opencv-python-headless",
     "xformers",
     "open3d",
     "fastapi",
@@ -64,6 +64,8 @@ packages = ["src/depth_anything_3", "src/fastda3"]
 [tool.hatch.build.targets.sdist]
 include = [
   "/README.md",
+  "/environment.yml",
+  "/.env.example",
   "/pyproject.toml",
   "/src/depth_anything_3",
   "/src/fastda3",

@@ -8,6 +8,53 @@ The final serving package was tested on a staging port, deployed to the existing
 production port, and tested again before repository publication. No API keys,
 request data, private deployment paths, or downloaded weights are included here.
 
+## Bash and Conda deployment update
+
+The portable deployment was verified separately using a newly created Python
+3.10.22 Conda environment with no inherited site packages. The complete serving
+dependencies were installed from downloaded Linux wheels, followed by the
+checkout's editable installation. `pip check` and native-library imports passed.
+The same dependency resolution is recorded in
+`requirements/fastda3.constraints.txt` and was reapplied through the installer.
+The clean install exposed a missing `editables` build dependency, which is now
+included explicitly. OpenCV uses the headless distribution.
+
+This verification used direct SSH and the repository's Bash scripts. It used no
+Slurm commands, job scheduler, system service, or root installation. The GPU test
+service was started with `nohup bash scripts/serve.sh` in an activated Conda
+environment; later SSH sessions accessed the service successfully. SIGTERM
+completed application shutdown and released the listening port and GPU process.
+
+| Deployment check | Result |
+|---|---|
+| `environment.yml` | Conda parsed and solved successfully using cached packages |
+| Independent Conda environment | Python 3.10.22; no old environment or user site packages |
+| Full offline dependency installation | Passed with a complete Linux CPython 3.10 wheelhouse |
+| Dependency health and native imports | `pip check` and import checks passed |
+| Bash syntax and logical regressions | 21 passed, including 4 deployment regressions |
+| Other working directory and checkout path containing spaces | Passed |
+| Caller environment overriding `.env`, alternate configuration file | Passed |
+| CLI paths overriding environment, relative paths resolved from checkout | Passed |
+| Assets and GPU preflight | Model/SALAD/DINOv2, writable output directories, BF16 CUDA operation passed |
+| Background service and SIGTERM | Cross-session access, preserved PID, graceful exit, port/GPU released |
+| Complete HTTP/GPU regression | Passed; single-image arrays remain pixel-identical to the old baseline |
+| Multi-view, pose conditions, ray pose, SSE | Passed |
+| Unconditioned video and pose-conditioned video | 26 frames each; 4 and 9 windows respectively; loop optimization and exports passed |
+
+The clean-environment short run used 48 image requests at concurrency 16: **8.464
+images/s**, P50 **1.695 s**, P95 **2.029 s**. The GPU process peak sampled over the
+complete regression was **22.159 decimal GB**. All 81 inference operations and
+artifact persistence completed with zero failures. This is a short run on an
+A100, not a hardware maximum or a measurement across GPU models.
+
+Downloaded packages and the pre-existing model assets were staged on the test
+host because that host could not directly resolve external domains. These
+network accommodations are not part of the release or runtime. A fresh operating
+system, another GPU model, and the full online weight download were not tested
+in this update. The supported baseline is Linux x86_64 with glibc 2.31+, Python
+3.10 and a CUDA-12.1-compatible NVIDIA GPU with native BF16; the default memory
+budget requires at least 32 decimal GB on one GPU.
+
 ## Functional checks
 
 | Check | Result |
@@ -71,12 +118,11 @@ python scripts/smoke_test.py --base-url http://127.0.0.1:8035 \
 Set `DA3_API_KEY` before the live checks. Add `--baseline /path/to/before-output.npz`
 only when that baseline was generated from the same image and old deployment.
 
-Wheel/SDK validation used an isolated virtual environment that inherited the
-existing CUDA environment. A fresh operating-system installation was not tested.
-The inherited environment also contains optional upstream evaluation packages
-with missing dependencies; a whole-environment `pip check` therefore does not
-pass. Those evaluation packages are not called by this service. The documented
-installation resolves the declared serving dependencies through normal pip.
+The earlier wheel/SDK validation used an isolated virtual environment that
+inherited the existing CUDA environment, which also contained unrelated
+evaluation packages with missing dependencies. The independent Conda validation
+above replaces that limitation for the documented serving installation:
+whole-environment `pip check` now passes. A fresh operating system was not tested.
 
 The video probe is synthetic (52 source frames sampled to 26), intended to verify
 multiple-window control flow and exported artifacts. No 100,000-frame video,

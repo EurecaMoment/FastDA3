@@ -18,70 +18,75 @@
 
 ## 环境与安装
 
-推荐 **Linux、Python 3.10、NVIDIA GPU、支持 CUDA 12.1 的驱动**。使用 PyTorch wheel 不需要单独安装 CUDA Toolkit。验收硬件为 A100-SXM4-80GB，服务显存保护上限 **32 十进制 GB**；Windows 和 CPU 推理不在本服务验收范围内。
+部署入口只需要 **Bash 和 Conda**，不使用 Slurm、`srun`、`sbatch` 或 systemd。支持范围为 **Linux x86_64（glibc 2.31+，建议 Ubuntu 22.04/24.04）、Python 3.10、支持原生 BF16 且兼容本版 PyTorch 的 NVIDIA Ampere 或更新 GPU，以及兼容 CUDA 12.1 的 NVIDIA 驱动**。PyTorch wheel 自带 CUDA 运行库，无需 root、单独安装 CUDA Toolkit 或编译 CUDA 扩展。
 
-核心版本：PyTorch `2.5.1+cu121`、torchvision `0.20.1+cu121`、Triton `3.1.0`、xformers `0.0.28.post3`、NumPy `1.26.4`。完整依赖见 [requirements/fastda3.txt](requirements/fastda3.txt)。
+默认配置要求单卡至少 **32 十进制 GB 显存**，验收硬件为 A100-SXM4-80GB。更小显存需要调低显存预算、批次和像素预算，未做验收；Windows、CPU 和其他 GPU 架构不在本服务支持范围内。GPU、端口、权重和数据路径均可配置，不绑定机器名、用户目录或固定 GPU UUID。
+
+核心版本：PyTorch `2.5.1+cu121`、torchvision `0.20.1+cu121`、Triton `3.1.0`、xformers `0.0.28.post3`、NumPy `1.26.4`。完整依赖见 [requirements/fastda3.txt](requirements/fastda3.txt)，安装时自动应用[验收环境的完整版本约束](requirements/fastda3.constraints.txt)，固定传递依赖以便复现。
 
 ```bash
 git clone --recurse-submodules https://github.com/EurecaMoment/FastDA3.git
 cd FastDA3
 git submodule update --init --recursive
 
-python3.10 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install torch==2.5.1 torchvision==0.20.1 \
-  --index-url https://download.pytorch.org/whl/cu121
-python -m pip install -r requirements/fastda3.txt
-python -m pip install --no-deps -e .
+conda env create -f environment.yml
+conda activate fastda3
+bash scripts/install.sh
 ```
 
-Ubuntu 上 OpenCV 导入提示 `libGL.so.1` 或 `libgthread` 缺失时：
+非交互 Bash 中若 `conda activate` 尚未初始化，先执行 `source /path/to/miniconda3/etc/profile.d/conda.sh`；这里的路径换成自己的 Conda 安装位置。也可用已有的独立 Python 3.10 Conda 环境执行安装脚本。
 
-```bash
-sudo apt-get update
-sudo apt-get install -y libgl1 libglib2.0-0
-```
-
-依赖包含官方 API 导入所需的导出库；`gsplat` 仅在使用官方 Gaussian 渲染功能时另行安装。
+安装脚本固定 CUDA 12.1 的 Torch/torchvision 配对，安装完整依赖并执行 `pip check` 与原生库导入检查。使用 headless OpenCV，无需安装桌面图形库。请使用独立环境，避免同时安装 `opencv-python` 和 `opencv-python-headless`。依赖包含官方 API 导入所需的导出库；`gsplat` 仅在使用官方 Gaussian 渲染功能时另行安装。
 
 ## 下载权重与长视频组件
 
 ```bash
-# 下载阶段需要联网，请在设置 HF_HUB_OFFLINE 之前执行。
-python scripts/download_assets.py
-python scripts/download_assets.py --check-only
+cp .env.example .env
+# 编辑 .env：填写自己的 DA3_API_KEY，选择 GPU，必要时修改资源路径。
+bash scripts/download.sh
+bash scripts/download.sh --check-only
 ```
 
 脚本准备 DA3 模型（约 6.8 GiB）、`dino_salad.ckpt`（约 336 MiB，验证 SHA256）、固定提交的 DINOv2 源码。SALAD 源码由 Git 子模块提供，其 checkpoint 已包含所需的 backbone 权重。
 
-默认目录为 `weights/DA3NESTED-GIANT-LARGE-1.1`、`weights/dino_salad.ckpt`、`vendor/dinov2`。已有资源可指定 `--model-dir`、`--salad-checkpoint` 和 `--dinov2-repo`，并把相同路径写入 `.env`。离线部署时复制这些资源和完整 SALAD 子模块即可。
+默认目录为 `weights/DA3NESTED-GIANT-LARGE-1.1`、`weights/dino_salad.ckpt`、`vendor/dinov2`。下载与启动使用同一份 `.env`；也可显式传入 `--model-dir`、`--salad-checkpoint` 和 `--dinov2-repo`。下载脚本会开启联网下载，启动时默认 `HF_HUB_OFFLINE=1`，不会临时联网拉取模型。
+
+已有权重时，把路径写入 `.env` 后直接运行 `--check-only`。完整离线部署还需预备 Conda 环境、完整源码（含 SALAD 子模块）、DINOv2 源码、模型与 SALAD 权重；若通过 wheelhouse 安装依赖，使用 `FASTDA3_WHEELHOUSE=/absolute/path/to/wheels bash scripts/install.sh`。wheelhouse 必须包含所有 Linux CPython 3.10 依赖及构建依赖，包括 CUDA 12.1 Torch wheel，不能只复制几项顶层依赖。
 
 ## 配置与启动
 
 ```bash
-cp .env.example .env
-# 编辑 .env：填写 DA3_API_KEY，选择 GPU，必要时修改权重和运行数据路径。
-source .venv/bin/activate
+conda activate fastda3
+bash scripts/check.sh
 bash scripts/serve.sh --host 0.0.0.0 --port 8035
 ```
 
 默认模型名 **`da3`**，客户端 base URL 为 `http://SERVER:8035/v1`。首次启动预热模型并捕获常用尺寸的 CUDA Graph，准备完成后 `/health` 才可用。使用 **1 个 worker**，避免重复加载模型。
 
-`scripts/serve.sh` 自动读取 `.env` 并要求设置 `DA3_API_KEY`。也可用 `fastda3 --model-dir /path/to/model --port 8035` 或 `python -m fastda3.server`，此时环境变量由调用者提供。
+`scripts/serve.sh` 自动读取仓库根目录的 `.env`，使用已激活 Conda 环境的 Python；可从任意工作目录调用，仓库路径可含空格。相对资源/输出路径统一按仓库根目录解析。优先级为 **命令行参数 > 调用者已导出的环境变量 > `.env` > 默认值**，`FASTDA3_ENV_FILE=/path/to/config.env` 可选择其他配置文件；配置文件使用可信的 Bash 赋值语法。
+
+`scripts/check.sh` 检查权重、视频组件、目录可写性、CUDA/BF16 和显存预算，并实际执行一个小型 GPU 运算；每次启动也自动进行预检。缺少资源、仍在使用示例密钥或显存预算超过硬件容量时，会在加载大模型前明确报错。也可用 `fastda3 --model-dir /path/to/model --port 8035` 或 `python -m fastda3.server`，此时环境变量由调用者提供。
+
+例如临时换 GPU 和端口：
+
+```bash
+CUDA_VISIBLE_DEVICES=1 bash scripts/serve.sh --port 8040
+```
 
 ```bash
 curl http://127.0.0.1:8035/health
 curl -H "Authorization: Bearer $DA3_API_KEY" http://127.0.0.1:8035/v1/models
 ```
 
-在另一终端调用时需要在该终端设置 `DA3_API_KEY`；启动脚本不会修改父终端环境。健康检查显示功能、缺失依赖、队列及显存统计。持久服务可参考 [deploy/fastda3.service.example](deploy/fastda3.service.example)，修改 checkout/Python 路径后保存为 `~/.config/systemd/user/fastda3.service`：
+在另一终端调用时需要在该终端设置 `DA3_API_KEY`；启动脚本不会修改父终端环境。健康检查显示功能、队列及显存统计。需要断开终端后继续运行时，在激活 Conda 环境的 Bash 中使用：
 
 ```bash
-systemctl --user daemon-reload
-systemctl --user enable --now fastda3
-journalctl --user -u fastda3 -f
+nohup bash scripts/serve.sh --port 8035 > fastda3.log 2>&1 &
+echo "FastDA3 PID: $!"
+tail -f fastda3.log
 ```
+
+记录上面的服务 PID，停止时执行 `kill <服务PID>`。启动脚本用 `exec` 交接进程，PID 保持一致，服务收到 SIGTERM 后关闭；后台运行同样只使用 Bash，不需要作业调度器或系统服务。多实例需各自设置端口及 `DA3_DATA_DIR`，避免共用任务和输出目录。
 
 | 配置 | 默认值 | 用途 |
 |---|---|---|
@@ -219,7 +224,7 @@ curl -H "Authorization: Bearer $DA3_API_KEY" http://127.0.0.1:8035/v1/jobs/job-R
 
 2026-11-12，A100、1024 长边、48 请求/16 并发，生产端口本机短测约 **8.46 图/秒**，P95 **2.03 秒**，完整回归进程显存峰值 **23.77 GB**。旧部署此前约 7.29 图/秒，但测量位置与安排不同，不是严格 A/B。性能取决于图片尺寸、混合负载、网络、CPU/磁盘和 GPU 共享情况，不代表硬件极限。详见[验收记录](docs/fastda3-verification.md)。
 
-验收覆盖 17 项逻辑回归；单图与旧版同图逐像素一致；多视图、位姿条件、ray pose、SSE、特殊宽高比；26 帧/4 窗口回环视频；26 帧/9 窗口位姿视频；逐帧深度、相机轨迹、ZIP、彩色二进制 PLY；取消及视频运行期间的单图请求。旧版一致性不等于官方全精度或数据集精度评估，尚未进行 10 万帧或多日稳定性验收。
+独立 Python 3.10 Conda 环境已完成完整依赖安装、`pip check`、Bash 启动、预检和正常停止验收，覆盖 21 项逻辑回归。完整 API 回归验证了单图与旧版同图逐像素一致；多视图、位姿条件、ray pose、SSE、特殊宽高比；26 帧/4 窗口回环视频；26 帧/9 窗口位姿视频；逐帧深度、相机轨迹、ZIP、彩色二进制 PLY；取消及视频运行期间的单图请求。该环境短测为 8.464 图/秒、P95 2.029 秒，采样显存峰值 22.159 GB。旧版一致性不等于官方全精度或数据集精度评估，尚未进行 10 万帧或多日稳定性验收。
 
 ```bash
 # 无需加载 DA3 权重，仍需要安装依赖。
@@ -233,6 +238,6 @@ python scripts/smoke_test.py --base-url http://127.0.0.1:8035
 
 ## 代码与来源
 
-`src/fastda3/` 包含引擎、调度、协议、存储和视频任务；`src/depth_anything_3/` 与 `da3_streaming/` 保留官方实现；`scripts/` 提供下载/启动/验收，`examples/` 提供客户端，`deploy/` 提供服务配置。
+`src/fastda3/` 包含引擎、调度、协议、存储、视频任务与启动预检；`src/depth_anything_3/` 与 `da3_streaming/` 保留官方实现；`environment.yml` 与 `scripts/` 提供 Conda 环境、安装、下载、检查、启动与验收，`examples/` 提供客户端。
 
 官方文档见 [README.upstream.md](README.upstream.md)，来源见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。官方代码保留 Apache-2.0；SALAD 子模块采用其 GPL-3.0 许可证；默认 DA3NESTED-GIANT-LARGE-1.1 权重为 CC BY-NC 4.0，具体以模型卡为准。

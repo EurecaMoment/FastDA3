@@ -1,11 +1,12 @@
 # Python 3.10 / Linux / CUDA 12.1; install the matching torch wheels first.
-# This is the serving environment used for the 2026-11-12 A100 verification.
-torch==2.5.1
-torchvision==0.20.1
+# Bash/Conda installer; CUDA wheels are also available from a complete wheelhouse.
+-c fastda3.constraints.txt
+torch==2.5.1+cu121
+torchvision==0.20.1+cu121
 triton==3.1.0
 xformers==0.0.28.post3
 numpy==1.26.4
-opencv-python==4.11.0.86
+opencv-python-headless==4.11.0.86
 Pillow==11.3.0
 fastapi==0.143.0
 uvicorn==0.54.0
@@ -38,3 +39,6 @@ prettytable==3.12.0
 scipy==1.15.3
 scikit-learn==1.7.2
 pandas==2.3.3
+hatchling==1.33.0
+hatch-vcs==0.5.0
+editables==0.5
