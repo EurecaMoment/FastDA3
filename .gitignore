@@ -34,3 +34,19 @@ src/debug_main.py
 src/outputs
 temp*.png
 /outputs
+
+# FastDA3 local configuration, checkpoints, downloads and request data
+.env
+.env.*
+!.env.example
+service.env
+.venv/
+venv/
+/weights/
+/vendor/
+/runtime/
+*.ckpt
+*.safetensors
+*.log
+*.bundle
+*.part

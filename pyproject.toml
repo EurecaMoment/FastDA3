@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "depth-anything-3"
-version = "0.0.0"
-description = "Depth Anything 3"
+version = "0.1.0"
+description = "Depth Anything 3 with FastDA3 OpenAI-style depth, pose and streaming serving"
 readme = "README.md"
 requires-python = ">=3.9, <=3.13"
 license = { text = "Apache-2.0" }
@@ -49,21 +49,31 @@ all = ["depth-anything-3[app,gs]"]
 
 [project.scripts]
 da3 = "depth_anything_3.cli:app"
+fastda3 = "fastda3.server:main"
 
 [project.urls]
 Homepage = "https://github.com/ByteDance-Seed/Depth-Anything-3"
+Repository = "https://github.com/EurecaMoment/FastDA3"
 
 [tool.hatch.version]
 source = "vcs"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/depth_anything_3"]
+packages = ["src/depth_anything_3", "src/fastda3"]
 
 [tool.hatch.build.targets.sdist]
 include = [
   "/README.md",
   "/pyproject.toml",
   "/src/depth_anything_3",
+  "/src/fastda3",
+  "/requirements",
+  "/scripts",
+  "/tests",
+  "/da3_streaming",
+  "/README.upstream.md",
+  "/THIRD_PARTY_NOTICES.md",
+  "/docs",
 ]
 
 [tool.hatch.metadata]

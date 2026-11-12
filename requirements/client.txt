@@ -1,0 +1,3 @@
+# Optional OpenAI SDK for examples/fastda3_client.py; verified against FastDA3.
+openai==1.109.1
+httpx==0.28.1
